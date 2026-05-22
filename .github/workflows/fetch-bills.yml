@@ -2,13 +2,14 @@ name: Fetch credit card bills
 
 on:
   schedule:
-    - cron: "0 1,13 * * *" # 06:30 & 18:30 IST (approx)
+    # 06:30 & 18:30 IST (approx, GitHub runs UTC)
+    - cron: "0 1,13 * * *"
   workflow_dispatch:
 
 jobs:
   fetch:
     runs-on: ubuntu-latest
-    timeout-minutes: 180
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
@@ -21,12 +22,17 @@ jobs:
 
       - name: Fetch bills via BillDesk API
         env:
+          # Supabase — required (service role bypasses RLS for batch writes)
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+
+          # BillDesk hexagon portal (KTK03 = Kotak InstaPay app id)
           BILLDESK_BASE: https://hexagon.billdesk.com/hgapp-instapay
           BILLDESK_APP_ID: KTK03
-          FETCH_CONCURRENCY: "3"
-          FETCH_DELAY_MS: "2500"
-          # Set after implementing crypto in lib/billdesk/crypto.ts:
-          # BILLDESK_ENCRYPT_IMPL: native
+
+          # Batch runner tuning — runs lanes (one per biller) in parallel,
+          # cards within a lane sequentially. ICICI gets a longer delay +
+          # fresh session per card automatically via lib/banks.ts.
+          FETCH_BILLER_PARALLEL: "4"
+          BILLER_FETCH_DELAY_MS: "4000"
         run: npm run fetch:bills
