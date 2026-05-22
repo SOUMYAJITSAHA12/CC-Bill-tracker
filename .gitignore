@@ -1,0 +1,9 @@
+node_modules
+.next
+.env
+.env.local
+.env*.local
+billdesk/crypto.config.json
+*.log
+.DS_Store
+.vercel

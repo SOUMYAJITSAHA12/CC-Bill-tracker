@@ -1,0 +1,32 @@
+name: Fetch credit card bills
+
+on:
+  schedule:
+    - cron: "0 1,13 * * *" # 06:30 & 18:30 IST (approx)
+  workflow_dispatch:
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - run: npm ci
+
+      - name: Fetch bills via BillDesk API
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          BILLDESK_BASE: https://hexagon.billdesk.com/hgapp-instapay
+          BILLDESK_APP_ID: KTK03
+          FETCH_CONCURRENCY: "3"
+          FETCH_DELAY_MS: "2500"
+          # Set after implementing crypto in lib/billdesk/crypto.ts:
+          # BILLDESK_ENCRYPT_IMPL: native
+        run: npm run fetch:bills

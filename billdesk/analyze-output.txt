@@ -1,0 +1,55 @@
+﻿=== OPERATIONIDs ===
+CREATEBILLER
+DELETEBILLER
+NLIAUTHORIZEPAYMENT
+NLIBILLERCATEGORIES
+NLIBILLERLSSEARCH
+NLIBILLERS
+NLICIRCLES
+NLIINIT
+NLIOPERCIRBYMOB
+NLIPLANS
+NLIRAISECOMPLAINTS
+NLIRETRIEVECOMPLAINTS
+NLIVALIDATEPAYMENT
+OPERATORNCIRCLEBYMOBILE
+PAYMENT
+PLANS
+RETRIEVEBILLER
+RETRIEVEBILLERS
+VALIDATEPAYMENT
+
+=== Context snippets ===
+
+--- REQDATA= (5) ---
+.OPERATIONID||"SCBLOGIN"===e.MB.OPERATIONID||"ZTNCLOGIN"===e.MB.OPERATIONID||"SBICCLOGIN"===e.MB.OPERATIONID||"ALHBDLOGIN"===e.MB.OPERATIONID||"OBCLOGIN"===e.MB.OPERATIONID||"Pre Login"===this.ShareDataService.loginType?e.MB.OPERATIONID:e.MB.OPERATIONID+"|"+this.ShareDataService.SESSIONKEY),e.MB.RQ.REQDATA=this.encryption,this.http.post(this.configUrl,{MB:e.MB})}convertxmlToBase64(e){return this.requestString=e,this.randomkey=this.getRandomKey(),this.encrandomkey=this.encryptRamdomKey(this.randomkey),this.encrypt(this.encrandomkey,this.requestString,"HDFCLOGIN")}getCookie(e){return this.cookiestr="LOGIN"!==e.MB.OPERATIONID?e.MB.SESSIONKEY:"123",this.cookiestr}getRandomKey(){this.text="",this.possible="123456789";for(let e=0;e<2;e++)this.text+=this.possible.charAt(Math.floor(Math.random()*this.possible.length));return this.RandomKey=this.text+"",this.text+""}encryptRamdomKey(e){this.rkEnc
+
+--- .REQDATA (27) ---
+Url="./InstaPayController",this.encryptDecryptRandomKey="5bb0411b18b4a90e",this.certThumbKey="7e2f8b054a76b935c33d980023b5ffc6616e0b0b"}getConfig(e){return"Pre Login"==this.ShareDataService.loginType&&(1==this.ShareDataService.callRetrieveCompAPI?this.ShareDataService.callRetrieveCompAPI=!1:(e.MB.RQ.REQDATA.customer={email:this.ShareDataService.preloginEmail,mobile:this.ShareDataService.preloginMobile,lastname:this.ShareDataService.userLastname,firstname:this.ShareDataService.userFirstname,customerId:this.ShareDataService.userCustId},e.MB.RQ.REQDATA.device={init_channel:"Internet",ip:"124.124.1.1",mac:"11-AC-58-21-1B-AA"})),this.requestString=JSON.stringify(e.MB.RQ.REQDATA),this.randomkey=this.getRandomKey(),this.encrandomkey=this.encryptRamdomKey(this.randomkey),e.MB.REQTOKEN=this.encrandomkey,this.encryption=this.encrypt(this.encrandomkey,this.requestString,"LOGIN"===e.MB.OPERATIONID||
+
+--- RESDATA (31) ---
+SESSIONKEY:this.ShareDataService.SESSIONKEY}},navigator.onLine?this.configService.getConfig(this.reqParams).map(i=>i).subscribe(i=>this.deleteBillerSuccess(i),i=>alert(i)):(this.loading=!1,alert("Please check your Internet connection"))}deleteBillerSuccess(e){this.loading=!1,this.encryption=e.MB.RS.RESDATA,this.encrandomkey=e.MB.RS.RESTOKEN,"0"===e.MB.RS.STATUSCODE?(this.decryption=this.configService.decrypt(this.encrandomkey,this.encryption,e.MB.OPERATIONID+"|"+this.ShareDataService.SESSIONKEY),this.decryption=JSON.parse(this.decryption),this.ShareDataService.editScheduledResponse.PAYMENT=this.decryption.BILLER,this.ShareDataService.isBillerDeleted=!0,this.dialogRef.close(),this.router.navigate(["/ScheduledSuccess"])):(alert(e.MB.RS.MESSAGE),this.dialogRef.close())}static#e=this.\u0275fac=function(i){return new(i||t)(Pe(Fg),Pe(rO),Pe(Di),Pe(qn),Pe(xn))};static#t=this.\u0275cmp=pt({type:
+
+--- RESTOKEN (31) ---
+ESSIONKEY}},navigator.onLine?this.configService.getConfig(this.reqParams).map(i=>i).subscribe(i=>this.deleteBillerSuccess(i),i=>alert(i)):(this.loading=!1,alert("Please check your Internet connection"))}deleteBillerSuccess(e){this.loading=!1,this.encryption=e.MB.RS.RESDATA,this.encrandomkey=e.MB.RS.RESTOKEN,"0"===e.MB.RS.STATUSCODE?(this.decryption=this.configService.decrypt(this.encrandomkey,this.encryption,e.MB.OPERATIONID+"|"+this.ShareDataService.SESSIONKEY),this.decryption=JSON.parse(this.decryption),this.ShareDataService.editScheduledResponse.PAYMENT=this.decryption.BILLER,this.ShareDataService.isBillerDeleted=!0,this.dialogRef.close(),this.router.navigate(["/ScheduledSuccess"])):(alert(e.MB.RS.MESSAGE),this.dialogRef.close())}static#e=this.\u0275fac=function(i){return new(i||t)(Pe(Fg),Pe(rO),Pe(Di),Pe(qn),Pe(xn))};static#t=this.\u0275cmp=pt({type:t,selectors:[["dialog-content-exam
+
+--- REQTOKEN (57) ---
+e.userFirstname,customerId:this.ShareDataService.userCustId},e.MB.RQ.REQDATA.device={init_channel:"Internet",ip:"124.124.1.1",mac:"11-AC-58-21-1B-AA"})),this.requestString=JSON.stringify(e.MB.RQ.REQDATA),this.randomkey=this.getRandomKey(),this.encrandomkey=this.encryptRamdomKey(this.randomkey),e.MB.REQTOKEN=this.encrandomkey,this.encryption=this.encrypt(this.encrandomkey,this.requestString,"LOGIN"===e.MB.OPERATIONID||"HDFCLOGIN"===e.MB.OPERATIONID||"SUYALOGIN"===e.MB.OPERATIONID||"SCBLOGIN"===e.MB.OPERATIONID||"ZTNCLOGIN"===e.MB.OPERATIONID||"SBICCLOGIN"===e.MB.OPERATIONID||"ALHBDLOGIN"===e.MB.OPERATIONID||"OBCLOGIN"===e.MB.OPERATIONID||"Pre Login"===this.ShareDataService.loginType?e.MB.OPERATIONID:e.MB.OPERATIONID+"|"+this.ShareDataService.SESSIONKEY),e.MB.RQ.REQDATA=this.encryption,this.http.post(this.configUrl,{MB:e.MB})}convertxmlToBase64(e){return this.requestString=e,this.randomkey
+
+--- generateKey (16) ---
+oding" specifying its encoding.');for(var V=new m(Te.length()),te=0;te<V.length;++te)V[te]=Te.at(te);return V}p.constants={},p.constants.PUBLIC_KEY_BYTE_LENGTH=32,p.constants.PRIVATE_KEY_BYTE_LENGTH=64,p.constants.SEED_BYTE_LENGTH=32,p.constants.SIGN_BYTE_LENGTH=64,p.constants.HASH_BYTE_LENGTH=64,p.generateKeyPair=function(Re){var Te=(Re=Re||{}).seed;if(void 0===Te)Te=d.random.getBytesSync(p.constants.SEED_BYTE_LENGTH);else if("string"==typeof Te){if(Te.length!==p.constants.SEED_BYTE_LENGTH)throw new TypeError('"seed" must be '+p.constants.SEED_BYTE_LENGTH+" bytes in length.")}else if(!(Te instanceof Uint8Array))throw new TypeError('"seed" must be a node.js Buffer, Uint8Array, or a binary string.');Te=h({message:Te,encoding:"binary"});for(var j=new m(p.constants.PUBLIC_KEY_BYTE_LENGTH),V=new m(p.constants.PRIVATE_KEY_BYTE_LENGTH),te=0;te<32;++te)V[te]=Te[te];return function w(Re,Te){var 
+
+--- publicKey (59) ---
+was set to use deprecated synchronous error handling behavior by code at: \n"+v.stack)}else d&&console.log("RxJS: Back to a better error behavior. Thank you. <3");d=f},get useDeprecatedSynchronousErrorHandling(){return d}}},651:(Y,D,c)=>{var d=c(6589);c(983),c(1675),c(1290),c(812);var s=c(2758),f=s.publicKeyValidator,v=s.privateKeyValidator;if(typeof S>"u")var S=d.jsbn.BigInteger;var y=d.util.ByteBuffer,m=typeof Buffer>"u"?Uint8Array:Buffer;d.pki=d.pki||{},Y.exports=d.pki.ed25519=d.ed25519=d.ed25519||{};var p=d.ed25519;function h(Re){var Te=Re.message;if(Te instanceof Uint8Array||Te instanceof m)return Te;var j=Re.encoding;if(void 0===Te){if(!Re.md)throw new TypeError('"options.message" or "options.md" not specified.');Te=Re.md.digest().getBytes(),j="binary"}if("string"==typeof Te&&!j)throw new TypeError('"options.encoding" must be "binary" or "utf8".');if("string"==typeof Te){if(typeof 
+
+--- privateKey (73) ---
+ed synchronous error handling behavior by code at: \n"+v.stack)}else d&&console.log("RxJS: Back to a better error behavior. Thank you. <3");d=f},get useDeprecatedSynchronousErrorHandling(){return d}}},651:(Y,D,c)=>{var d=c(6589);c(983),c(1675),c(1290),c(812);var s=c(2758),f=s.publicKeyValidator,v=s.privateKeyValidator;if(typeof S>"u")var S=d.jsbn.BigInteger;var y=d.util.ByteBuffer,m=typeof Buffer>"u"?Uint8Array:Buffer;d.pki=d.pki||{},Y.exports=d.pki.ed25519=d.ed25519=d.ed25519||{};var p=d.ed25519;function h(Re){var Te=Re.message;if(Te instanceof Uint8Array||Te instanceof m)return Te;var j=Re.encoding;if(void 0===Te){if(!Re.md)throw new TypeError('"options.message" or "options.md" not specified.');Te=Re.md.digest().getBytes(),j="binary"}if("string"==typeof Te&&!j)throw new TypeError('"options.encoding" must be "binary" or "utf8".');if("string"==typeof Te){if(typeof Buffer<"u")return Buffe
+
+--- encrypt (265) ---
+,mode:M})},d.aes.startDecrypting=function(A,M,I,O){var g=x({key:A,output:I,decrypt:!0,mode:O});return g.start(M),g},d.aes.createDecryptionCipher=function(A,M){return x({key:A,output:null,decrypt:!0,mode:M})},d.aes.Algorithm=function(A,M){f||_();var I=this;I.name=A,I.mode=new M({blockSize:16,cipher:{encrypt:function(O,g){return R(I._w,O,g,!1)},decrypt:function(O,g){return R(I._w,O,g,!0)}}}),I._init=!1},d.aes.Algorithm.prototype.initialize=function(A){if(!this._init){var I,M=A.key;if("string"!=typeof M||16!==M.length&&24!==M.length&&32!==M.length){if(d.util.isArray(M)&&(16===M.length||24===M.length||32===M.length)){I=M,M=d.util.createBuffer();for(var O=0;O<I.length;++O)M.putByte(I[O])}}else M=d.util.createBuffer(M);if(!d.util.isArray(M)){I=M,M=[];var g=I.length();if(16===g||24===g||32===g)for(g>>>=2,O=0;O<g;++O)M.push(I.getInt32())}if(!d.util.isArray(M)||4!==M.length&&6!==M.length&&8!==M.l
+
+--- decrypt (279) ---
+kBillDeskInstapay=self.webpackChunkBillDeskInstapay||[]).push([[792],{57:(Y,D,c)=>{var d=c(6589);function s(A,M){d.cipher.registerAlgorithm(A,function(){return new d.aes.Algorithm(A,M)})}c(5855),c(6199),c(812),Y.exports=d.aes=d.aes||{},d.aes.startEncrypting=function(A,M,I,O){var g=x({key:A,output:I,decrypt:!1,mode:O});return g.start(M),g},d.aes.createEncryptionCipher=function(A,M){return x({key:A,output:null,decrypt:!1,mode:M})},d.aes.startDecrypting=function(A,M,I,O){var g=x({key:A,output:I,decrypt:!0,mode:O});return g.start(M),g},d.aes.createDecryptionCipher=function(A,M){return x({key:A,output:null,decrypt:!0,mode:M})},d.aes.Algorithm=function(A,M){f||_();var I=this;I.name=A,I.mode=new M({blockSize:16,cipher:{encrypt:function(O,g){return R(I._w,O,g,!1)},decrypt:function(O,g){return R(I._w,O,g,!0)}}}),I._init=!1},d.aes.Algorithm.prototype.initialize=function(A){if(!this._init){var I,M=
+
+--- NLIINIT (1) ---
+rams={MB:{RQ:{DEVICEINFO:{DEVICEWLID:"eweqweq-qweqw-qweqw-qweqw",DEVICEIMEI:"1234567891012",DEVICEMAC:"",DEVICEIP:"",DEVICEMODEL:"",DEVICEOS:"Internet",DEVICELAT:"",DEVICELONG:""},APPINFO:{APPID:this.ShareDataService.APPID,CHANNEL:this.ShareDataService.channel,APPVER:"1.0"},REQDATA:{}},OPERATIONID:"NLIINIT",REQTOKEN:"",SESSIONKEY:"werwer23423432"}};let i=localStorage.getItem(this.paymentid);"authorized"===this.goto&&i?(this.storedData=JSON.parse(this.configService.decryptRamdomKey(i)),localStorage.removeItem(this.paymentid),this.onNLIInitSuccess(this.storedData.SSO)):this.configService.getConfig(this.reqParams).map(r=>r).subscribe(r=>this.onNLIInitSuccess(r),r=>this.apifailure(r,this.reqParams))}onNLIInitSuccess(e){this.encryption=e.MB.RS.RESDATA,this.encrandomkey=e.MB.RS.RESTOKEN,this.ShareDataService.dataToStore={...this.ShareDataService.dataToStore,SSO:e},"0"===e.MB.RS.STATUSCODE?(thi

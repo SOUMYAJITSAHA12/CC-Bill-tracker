@@ -1,0 +1,26 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg: #0f172a;
+  --card: #1e293b;
+  --border: #334155;
+  --text: #f1f5f9;
+  --muted: #94a3b8;
+  --accent: #38bdf8;
+  --danger: #f87171;
+  --warn: #fbbf24;
+  --ok: #4ade80;
+  --row-overdue: rgba(248, 113, 113, 0.22);
+  --row-due: rgba(251, 191, 36, 0.2);
+  --row-paid: rgba(74, 222, 128, 0.18);
+  --row-no-dues: rgba(148, 163, 184, 0.12);
+  --row-not-fetched: rgba(51, 65, 85, 0.35);
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+}
