@@ -5,6 +5,12 @@
   "functions": {
     "app/api/fetch/run/route.ts": {
       "maxDuration": 300
+    },
+    "app/api/fetch/stream/route.ts": {
+      "maxDuration": 300
+    },
+    "app/api/fetch/trigger/route.ts": {
+      "maxDuration": 60
     }
   }
 }
