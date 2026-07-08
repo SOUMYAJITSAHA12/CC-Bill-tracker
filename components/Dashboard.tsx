@@ -201,6 +201,22 @@ export function Dashboard() {
     [openBills]
   );
 
+  // Cumulative live account balance across all cards (statement + unbilled
+  // spends − credits). Null on cards we've never fetched or where the portal
+  // didn't expose it — skipped from the sum instead of counting as 0.
+  const outstandingTotal = useMemo(
+    () =>
+      cards.reduce(
+        (sum, c) => sum + (c.current_outstanding != null ? Number(c.current_outstanding) : 0),
+        0
+      ),
+    [cards]
+  );
+  const outstandingKnownCount = useMemo(
+    () => cards.filter((c) => c.current_outstanding != null).length,
+    [cards]
+  );
+
   const overdue = openBills.filter((b) => new Date(b.due_date) < new Date());
   const dueSoon = openBills.filter((b) => {
     const d = new Date(b.due_date);
@@ -725,15 +741,15 @@ export function Dashboard() {
   }
 
   return (
-    <div className="max-w-6xl mx-auto p-4 sm:p-6 space-y-6 sm:space-y-8 min-w-0 overflow-x-hidden">
-      <header className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold">CC Bill Tracker</h1>
-          <p className="text-[var(--muted)] text-sm">
+    <div className="max-w-6xl mx-auto p-3 sm:p-6 space-y-5 sm:space-y-8 min-w-0 overflow-x-hidden">
+      <header className="flex flex-col md:flex-row md:flex-wrap md:items-center md:justify-between gap-4">
+        <div className="min-w-0">
+          <h1 className="text-xl sm:text-2xl font-bold">CC Bill Tracker</h1>
+          <p className="text-[var(--muted)] text-xs sm:text-sm break-words">
             BillDesk API · {cards.length} cards · {openBills.length} open ·{" "}
             {formatInr(unpaidTotal)} due
           </p>
-          <p className="text-[var(--muted)] text-xs mt-1">
+          <p className="text-[var(--muted)] text-xs mt-1 hidden sm:block">
             Pick the correct bank when adding a card (not just nickname).
           </p>
         </div>
@@ -743,7 +759,7 @@ export function Dashboard() {
             onClick={() =>
               formMode !== "closed" ? closeForm() : openAddForm()
             }
-            className="px-4 py-2 rounded-lg border border-[var(--border)] hover:bg-[var(--card)]"
+            className="flex-1 sm:flex-none px-4 py-2 rounded-lg border border-[var(--border)] hover:bg-[var(--card)] text-sm sm:text-base"
           >
             {formMode !== "closed" ? "Close" : "Add card"}
           </button>
@@ -751,15 +767,15 @@ export function Dashboard() {
             type="button"
             onClick={triggerFetch}
             disabled={fetching || fetchingCardId !== null}
-            className="px-4 py-2 rounded-lg bg-brand-600 hover:bg-brand-700 disabled:opacity-50 inline-flex items-center gap-2"
+            className="flex-1 sm:flex-none px-4 py-2 rounded-lg bg-brand-600 hover:bg-brand-700 disabled:opacity-50 inline-flex items-center justify-center gap-2 text-sm sm:text-base"
           >
             {fetching && <Spinner />}
             {fetching ? "Fetching all…" : "Fetch all bills"}
           </button>
           {currentUserEmail && (
-            <div className="flex items-center gap-2 ml-2 pl-3 border-l border-[var(--border)]">
+            <div className="w-full sm:w-auto flex items-center gap-2 sm:ml-2 sm:pl-3 sm:border-l sm:border-[var(--border)] justify-between sm:justify-start">
               <span
-                className="text-xs text-[var(--muted)] truncate max-w-[160px]"
+                className="text-xs text-[var(--muted)] truncate min-w-0 flex-1 sm:flex-none sm:max-w-[160px]"
                 title={currentUserEmail}
               >
                 {currentUserEmail}
@@ -768,7 +784,7 @@ export function Dashboard() {
                 type="button"
                 onClick={handleSignOut}
                 disabled={signingOut}
-                className="px-3 py-1.5 text-xs rounded-lg border border-[var(--border)] hover:bg-[var(--card)] disabled:opacity-50 inline-flex items-center gap-1.5"
+                className="px-3 py-1.5 text-xs rounded-lg border border-[var(--border)] hover:bg-[var(--card)] disabled:opacity-50 inline-flex items-center gap-1.5 shrink-0"
               >
                 {signingOut && <Spinner size="xs" />}
                 {signingOut ? "Signing out…" : "Sign out"}
@@ -784,13 +800,13 @@ export function Dashboard() {
           role="status"
           aria-live="polite"
         >
-          <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+          <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center sm:justify-between gap-1 sm:gap-2 text-sm">
             <span className="font-medium">
               {fetchProgress.total === 0
                 ? "Starting fetch…"
                 : `Fetching bills · ${fetchProgress.done} of ${fetchProgress.total}`}
             </span>
-            <span className="text-[var(--muted)] text-xs">
+            <span className="text-[var(--muted)] text-xs break-words">
               {fetchProgress.current
                 ? `Currently: ${fetchProgress.current}`
                 : fetchProgress.total > 0 && fetchProgress.done < fetchProgress.total
@@ -830,8 +846,17 @@ export function Dashboard() {
         </p>
       )}
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 min-w-0">
+      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3 sm:gap-4 min-w-0">
         <Stat label="Unpaid amount" value={formatInr(unpaidTotal)} tone="ok" />
+        <Stat
+          label={
+            outstandingKnownCount < cards.length
+              ? `Total outstanding (${outstandingKnownCount}/${cards.length} cards)`
+              : "Total outstanding"
+          }
+          value={formatInr(outstandingTotal)}
+          tone="warn"
+        />
         <Stat label="Open bills" value={String(openBills.length)} tone="ok" />
         <Stat label="Overdue" value={String(overdue.length)} tone="danger" />
         <Stat label="Due ≤ 7 days" value={String(dueSoon.length)} tone="warn" />
@@ -863,7 +888,220 @@ export function Dashboard() {
           </p>
         ) : (
           <>
-            <div className="overflow-x-auto rounded-xl border border-[var(--border)] -mx-1 px-1">
+            {/* Mobile filter row — same filters as the desktop column headers,
+                exposed as a compact 3-column select bar above the card list. */}
+            <div className="md:hidden mb-3 grid grid-cols-3 gap-2">
+              <label className="block">
+                <span className="text-[10px] uppercase tracking-wide text-[var(--muted)]">
+                  Status
+                </span>
+                <select
+                  value={statusFilter}
+                  onChange={(e) =>
+                    setStatusFilter(e.target.value as CardBillStatus | "all")
+                  }
+                  aria-label="Filter by status"
+                  className="mt-1 block w-full text-xs px-2 py-2 rounded border border-[var(--border)] bg-[var(--bg)]"
+                >
+                  <option value="all">All</option>
+                  <option value="overdue">Overdue</option>
+                  <option value="due">Bill due</option>
+                  <option value="partial">Partial</option>
+                  <option value="paid">Paid</option>
+                  <option value="no_dues">No due</option>
+                  <option value="not_fetched">Not fetched</option>
+                </select>
+              </label>
+              <label className="block">
+                <span className="text-[10px] uppercase tracking-wide text-[var(--muted)]">
+                  Profile
+                </span>
+                <select
+                  value={profileFilter}
+                  onChange={(e) => setProfileFilter(e.target.value)}
+                  aria-label="Filter by profile"
+                  className="mt-1 block w-full text-xs px-2 py-2 rounded border border-[var(--border)] bg-[var(--bg)]"
+                >
+                  <option value="all">All</option>
+                  <option value="none">Unassigned</option>
+                  {profiles.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="block">
+                <span className="text-[10px] uppercase tracking-wide text-[var(--muted)]">
+                  Bank
+                </span>
+                <select
+                  value={bankFilter}
+                  onChange={(e) => setBankFilter(e.target.value)}
+                  aria-label="Filter by bank"
+                  className="mt-1 block w-full text-xs px-2 py-2 rounded border border-[var(--border)] bg-[var(--bg)]"
+                >
+                  <option value="all">All</option>
+                  {bankOptions.map((b) => (
+                    <option key={b} value={b}>
+                      {BANK_BILLER_MAP[b]?.name ?? b}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+
+            {/* Mobile card list — one stacked card per row, action buttons in
+                a wrapping row underneath. Hidden on md+ where the table wins. */}
+            <div className="md:hidden space-y-3">
+              {tableCards.length === 0 ? (
+                <div className="p-6 text-center text-sm text-[var(--muted)] rounded-xl border border-[var(--border)]">
+                  No cards match the current filters.{" "}
+                  <button
+                    type="button"
+                    onClick={clearAllFilters}
+                    className="text-brand-600 hover:underline"
+                  >
+                    Clear filters
+                  </button>
+                </div>
+              ) : null}
+              {tableCards.map((c) => {
+                const summary = cardSummary(c);
+                const rowBg = statusRowClass(summary.status);
+                const rowAccent = statusRowAccent(summary.status);
+                const dueDisplay =
+                  summary.amount != null && summary.amount > 0
+                    ? formatInr(summary.amount)
+                    : summary.status === "no_dues"
+                      ? "₹0"
+                      : "—";
+                return (
+                  <div
+                    key={c.id}
+                    className={`rounded-xl border border-[var(--border)] p-3 ${rowBg} ${rowAccent}`}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span
+                            className={`inline-block px-2 py-0.5 rounded text-[10px] font-medium ${statusBadgeClass(summary.status)}`}
+                          >
+                            {summary.label}
+                          </span>
+                          <span className="font-medium truncate">
+                            {c.nickname}
+                          </span>
+                        </div>
+                        <p className="text-xs text-[var(--muted)] mt-0.5 truncate">
+                          {BANK_BILLER_MAP[c.bank]?.name ?? c.bank} · ****
+                          {c.last4}
+                          {profileLabel(c) !== "—" && (
+                            <> · {profileLabel(c)}</>
+                          )}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
+                      <div>
+                        <p className="text-[10px] uppercase tracking-wide text-[var(--muted)]">
+                          Due
+                        </p>
+                        <p
+                          className={`mt-0.5 font-semibold tabular-nums ${statusAmountClass(summary.status)}`}
+                        >
+                          {dueDisplay}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] uppercase tracking-wide text-[var(--muted)]">
+                          Due date
+                        </p>
+                        <p className="mt-0.5 text-[var(--muted)] tabular-nums">
+                          {summary.dueDate ?? "—"}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] uppercase tracking-wide text-[var(--muted)]">
+                          Outstanding
+                        </p>
+                        <p className="mt-0.5 tabular-nums">
+                          {c.current_outstanding != null
+                            ? formatInr(Number(c.current_outstanding))
+                            : "—"}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          openEditForm(c);
+                        }}
+                        className="text-xs px-3 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--bg)]/50"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => fetchOneCard(c)}
+                        disabled={fetching || fetchingCardId !== null}
+                        className="text-xs px-3 py-1.5 rounded-lg border border-brand-600 text-brand-600 disabled:opacity-50 inline-flex items-center gap-1"
+                      >
+                        {fetchingCardId === c.id && <Spinner size="xs" />}
+                        {fetchingCardId === c.id ? "Fetching…" : "Fetch bill"}
+                      </button>
+                      {supportsCreditCardUpi(c.bank) && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const amt =
+                              summary.amount != null && summary.amount > 0
+                                ? summary.amount
+                                : undefined;
+                            openUpiPay(c, amt);
+                          }}
+                          className="text-xs px-3 py-1.5 rounded-lg border border-[var(--ok)] text-[var(--ok)]"
+                        >
+                          UPI QR
+                        </button>
+                      )}
+                      {summary.status === "paid" &&
+                        latestPaidBillByCard.get(c.id) && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              requestConfirm(
+                                "unmark",
+                                latestPaidBillByCard.get(c.id)!
+                              )
+                            }
+                            className="text-xs px-3 py-1.5 rounded-lg border border-[var(--warn)] text-[var(--warn)]"
+                          >
+                            Unmark paid
+                          </button>
+                        )}
+                      <button
+                        type="button"
+                        onClick={() => deleteCard(c.id)}
+                        disabled={deletingCardId === c.id}
+                        className="text-xs px-3 py-1.5 rounded-lg ml-auto text-[var(--danger)] disabled:opacity-50 inline-flex items-center gap-1"
+                      >
+                        {deletingCardId === c.id && <Spinner size="xs" />}
+                        {deletingCardId === c.id ? "Removing…" : "Remove"}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Desktop table — hidden on mobile in favor of the card list above. */}
+            <div className="hidden md:block overflow-x-auto rounded-xl border border-[var(--border)] -mx-1 px-1">
             <table className="w-full min-w-[880px] text-sm border-collapse">
               <thead className="bg-[var(--card)] text-left text-[var(--muted)]">
                 <tr>
@@ -931,6 +1169,7 @@ export function Dashboard() {
                   <th className="p-3 whitespace-nowrap align-bottom">Last4</th>
                   <th className="p-3 text-right whitespace-nowrap align-bottom">Due amount</th>
                   <th className="p-3 whitespace-nowrap align-bottom">Due date</th>
+                  <th className="p-3 text-right whitespace-nowrap align-bottom">Outstanding</th>
                   <th className="p-3 text-right whitespace-nowrap align-bottom">Actions</th>
                 </tr>
               </thead>
@@ -938,7 +1177,7 @@ export function Dashboard() {
                 {tableCards.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={8}
+                      colSpan={9}
                       className="p-6 text-center text-sm text-[var(--muted)]"
                     >
                       No cards match the current filters.{" "}
@@ -985,6 +1224,11 @@ export function Dashboard() {
                     </td>
                     <td className={`p-3 text-[var(--muted)] ${rowBg}`}>
                       {summary.dueDate ?? "—"}
+                    </td>
+                    <td className={`p-3 text-right tabular-nums ${rowBg}`}>
+                      {c.current_outstanding != null
+                        ? formatInr(Number(c.current_outstanding))
+                        : "—"}
                     </td>
                     <td className={`p-3 text-right space-x-2 whitespace-nowrap ${rowBg}`}>
                       <button
@@ -1067,26 +1311,28 @@ export function Dashboard() {
               return (
                 <div
                   key={b.id}
-                  className="flex flex-wrap items-center justify-between gap-2 p-4 rounded-xl border border-[var(--border)] bg-[var(--card)]"
+                  className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center sm:justify-between gap-3 p-4 rounded-xl border border-[var(--border)] bg-[var(--card)]"
                 >
-                  <div>
-                    <span className="font-medium">
-                      {b.cards?.nickname ?? "Card"} · ****{b.cards?.last4}
-                    </span>
-                    {profileName && (
-                      <span className="text-[var(--muted)] ml-2 text-sm">
-                        ({profileName})
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                      <span className="font-medium">
+                        {b.cards?.nickname ?? "Card"} · ****{b.cards?.last4}
                       </span>
-                    )}
-                    <span className="text-[var(--muted)] ml-2 text-sm uppercase">
-                      {b.cards?.bank}
-                    </span>
-                    {b.status === "PARTIAL" && (
-                      <span className="ml-2 text-xs px-1.5 py-0.5 rounded bg-[var(--warn)]/15 text-[var(--warn)]">
-                        Partial
+                      {profileName && (
+                        <span className="text-[var(--muted)] text-sm">
+                          ({profileName})
+                        </span>
+                      )}
+                      <span className="text-[var(--muted)] text-xs uppercase">
+                        {b.cards?.bank}
                       </span>
-                    )}
-                    <p className="text-sm mt-1">
+                      {b.status === "PARTIAL" && (
+                        <span className="text-xs px-1.5 py-0.5 rounded bg-[var(--warn)]/15 text-[var(--warn)]">
+                          Partial
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-sm mt-1 break-words">
                       {formatInr(remaining)} remaining
                       {b.status === "PARTIAL" && paidSoFar > 0 && (
                         <span className="text-[var(--muted)]">
@@ -1101,7 +1347,7 @@ export function Dashboard() {
                       </span>
                     </p>
                   </div>
-                  <div className="flex flex-wrap gap-2">
+                  <div className="flex flex-wrap gap-2 sm:shrink-0">
                     {(() => {
                       const card = cardById.get(b.card_id);
                       return (
@@ -1110,7 +1356,7 @@ export function Dashboard() {
                           <button
                             type="button"
                             onClick={() => openUpiPay(card, remaining)}
-                            className="text-sm px-3 py-1 rounded border border-[var(--ok)] text-[var(--ok)] hover:bg-[var(--ok)]/10"
+                            className="flex-1 sm:flex-none text-sm px-3 py-1.5 rounded border border-[var(--ok)] text-[var(--ok)] hover:bg-[var(--ok)]/10"
                           >
                             UPI QR
                           </button>
@@ -1120,7 +1366,7 @@ export function Dashboard() {
                     <button
                       type="button"
                       onClick={() => openPayDialog(b)}
-                      className="text-sm px-3 py-1 rounded border border-[var(--border)]"
+                      className="flex-1 sm:flex-none text-sm px-3 py-1.5 rounded border border-[var(--border)]"
                     >
                       Record payment
                     </button>
@@ -1139,13 +1385,13 @@ export function Dashboard() {
             {recentPaidBills.map((b) => (
               <div
                 key={b.id}
-                className="flex flex-wrap items-center justify-between gap-2 p-4 rounded-xl border border-[var(--border)] bg-[var(--row-paid)]"
+                className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center sm:justify-between gap-3 p-4 rounded-xl border border-[var(--border)] bg-[var(--row-paid)]"
               >
-                <div>
+                <div className="min-w-0">
                   <span className="font-medium">
                     {b.cards?.nickname ?? "Card"} · ****{b.cards?.last4}
                   </span>
-                  <p className="text-sm mt-1 text-[var(--muted)]">
+                  <p className="text-sm mt-1 text-[var(--muted)] break-words">
                     {formatInr(Number(b.amount))} · due {b.due_date}
                     {b.paid_at && (
                       <span> · paid {b.paid_at.slice(0, 10)}</span>
@@ -1155,7 +1401,7 @@ export function Dashboard() {
                 <button
                   type="button"
                   onClick={() => requestConfirm("unmark", b)}
-                  className="text-sm px-3 py-1 rounded border border-[var(--warn)] text-[var(--warn)] hover:bg-[var(--warn)]/10"
+                  className="w-full sm:w-auto text-sm px-3 py-1.5 rounded border border-[var(--warn)] text-[var(--warn)] hover:bg-[var(--warn)]/10"
                 >
                   Unmark paid
                 </button>
@@ -1320,10 +1566,12 @@ function Stat({
         ? "var(--warn)"
         : "var(--ok)";
   return (
-    <div className="min-w-0 p-4 rounded-xl border border-[var(--border)] bg-[var(--card)] overflow-hidden">
-      <p className="text-[var(--muted)] text-sm truncate">{label}</p>
+    <div className="min-w-0 p-3 sm:p-4 rounded-xl border border-[var(--border)] bg-[var(--card)] overflow-hidden">
+      <p className="text-[var(--muted)] text-xs sm:text-sm truncate" title={label}>
+        {label}
+      </p>
       <p
-        className="text-xl sm:text-2xl font-bold tabular-nums truncate"
+        className="text-lg sm:text-xl xl:text-2xl font-bold tabular-nums truncate"
         style={{ color }}
         title={value}
       >

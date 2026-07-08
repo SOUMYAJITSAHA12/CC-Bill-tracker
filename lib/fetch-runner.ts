@@ -77,6 +77,31 @@ async function persistBillFromFetch(
     const due = result.due_date ?? new Date().toISOString().slice(0, 10);
     const portalAmount = Number(result.amount);
 
+    // When a fresh statement (this fetch's `due`) arrives, any prior-cycle
+    // UNPAID/PARTIAL bills for the same card must already be settled — a new
+    // statement wouldn't be issued if the earlier cycle were still owed, and
+    // if it were, BillDesk would carry that balance into the new billamount.
+    // Mark them PAID so the dashboard doesn't double-count old cycles.
+    const { data: staleOpen } = await supabase
+      .from("bills")
+      .select("id, amount")
+      .eq("card_id", card.id)
+      .in("status", ["UNPAID", "PARTIAL"])
+      .lt("due_date", due);
+    if (staleOpen && staleOpen.length > 0) {
+      const paidAt = new Date().toISOString();
+      for (const b of staleOpen) {
+        await supabase
+          .from("bills")
+          .update({
+            status: "PAID",
+            amount_paid: Number(b.amount),
+            paid_at: paidAt,
+          })
+          .eq("id", b.id);
+      }
+    }
+
     const { data: paidRows } = await supabase
       .from("bills")
       .select("id")
@@ -258,6 +283,19 @@ export async function runSingleCardFetch(
     amount: result.amount ?? 0,
     error: result.error ?? null,
   });
+
+  // Snapshot the live outstanding on the card row whenever the portal gave us
+  // a number. FAILED fetches (rate limits, etc.) leave the previous value
+  // untouched so the dashboard keeps showing the last known good balance.
+  if (result.outstanding !== undefined && result.status !== "FAILED") {
+    await supabase
+      .from("cards")
+      .update({
+        current_outstanding: result.outstanding,
+        outstanding_fetched_at: new Date().toISOString(),
+      })
+      .eq("id", card.id);
+  }
 
   const persist = await persistBillFromFetch(supabase, card, result);
   const displayStatus = outcomeStatusFromPersist(result.status, persist);

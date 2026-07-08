@@ -19,6 +19,14 @@ export type Card = {
   active: boolean;
   created_at: string;
   updated_at: string;
+  /**
+   * Live account balance from BillDesk's "Current Outstanding Amount" (or
+   * computed from Total Amount Due + Unbilled Amount when not directly
+   * exposed). Refreshed on every fetch — see `outstanding_fetched_at`.
+   * Null when the card has never been fetched or the portal didn't return it.
+   */
+  current_outstanding?: number | null;
+  outstanding_fetched_at?: string | null;
   card_profiles?: Pick<CardProfile, "id" | "name"> | null;
 };
 
@@ -65,5 +73,12 @@ export type BillFetchResult = {
   due_date?: string;
   bill_date?: string;
   min_due?: number;
+  /**
+   * Live account balance from the portal (statement + post-statement spends
+   * − credits). Present on FETCHED and NO_DUES results whenever the portal
+   * exposed it; may still be defined on some FAILED results but callers
+   * shouldn't rely on it.
+   */
+  outstanding?: number;
   error?: string;
 };

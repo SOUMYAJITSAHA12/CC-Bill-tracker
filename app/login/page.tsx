@@ -109,8 +109,8 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="min-h-screen flex items-center justify-center p-6">
-      <div className="w-full max-w-md rounded-xl border border-[var(--border)] bg-[var(--card)] p-8">
+    <main className="min-h-screen flex items-center justify-center p-4 sm:p-6">
+      <div className="w-full max-w-md rounded-xl border border-[var(--border)] bg-[var(--card)] p-5 sm:p-8">
         <h1 className="text-2xl font-semibold mb-1">CC Bill Tracker</h1>
         <p className="text-[var(--muted)] text-sm mb-6">
           {mode === "signin"

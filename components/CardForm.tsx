@@ -154,7 +154,7 @@ export function CardForm({
   return (
     <form
       onSubmit={submit}
-      className="p-6 rounded-xl border border-[var(--border)] bg-[var(--card)] grid gap-4 md:grid-cols-2"
+      className="p-4 sm:p-6 rounded-xl border border-[var(--border)] bg-[var(--card)] grid gap-4 md:grid-cols-2"
     >
       <div className="md:col-span-2 flex items-center justify-between gap-2">
         <h3 className="font-semibold">

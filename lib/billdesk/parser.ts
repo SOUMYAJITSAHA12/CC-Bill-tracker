@@ -28,36 +28,56 @@ function parseAmount(v: string | number | undefined): number {
   return isNaN(n) ? 0 : n;
 }
 
-/** BoB and others put payable amount in additional_details when billamount is 0 or negative */
-function amountFromAdditionalDetails(
-  extras?: { label?: string; value?: string }[]
-): number {
-  if (!extras?.length) return 0;
-
-  const priority = [
-    /current\s*outstanding/i,
-    /total\s*amount\s*due/i,
-    /total\s*due/i,
-    /amount\s*due/i,
-    /statement\s*amount/i,
-    /outstanding\s*amount/i,
-  ];
-
-  for (const re of priority) {
-    const row = extras.find((d) => re.test(d.label ?? ""));
-    if (row?.value) {
-      const n = parseAmount(row.value);
-      if (n > 0) return n;
-    }
+/**
+ * Live account balance ("Current Outstanding") from additional_details.
+ * Priority:
+ *   1. Explicit "Current Outstanding [Amount]" / "Outstanding Amount" row.
+ *   2. Computed as max(billamount, Total Amount Due, 0) + Unbilled Amount
+ *      when the portal doesn't send it explicitly (e.g. SBM).
+ * Returns undefined when no signal is available at all.
+ */
+function extractOutstanding(
+  bill: PaymentBill
+): number | undefined {
+  const extras = bill.additional_details;
+  if (!extras?.length) {
+    // Fall back to the statement itself as a last-resort estimate.
+    const stmt = parseAmount(
+      (bill.billamount ?? bill.net_billamount) as string | number | undefined
+    );
+    return stmt > 0 ? stmt : undefined;
   }
 
-  let max = 0;
-  for (const d of extras) {
-    if (/unbilled/i.test(d.label ?? "")) continue;
-    const n = parseAmount(d.value);
-    if (n > max) max = n;
+  const explicit = extras.find((d) =>
+    /^\s*current\s*outstanding(?:\s*amount)?\s*$|^\s*outstanding\s*amount\s*$/i.test(
+      d.label ?? ""
+    )
+  );
+  if (explicit?.value !== undefined && explicit.value !== "") {
+    const n = parseAmount(explicit.value);
+    if (!Number.isNaN(n)) return n;
   }
-  return max;
+
+  const totalDue = extras.find((d) =>
+    /^\s*(?:total\s*amount\s*due|amount\s*due|total\s*due|total\s*payable|net\s*amount\s*due)\s*$/i.test(
+      d.label ?? ""
+    )
+  );
+  const unbilled = extras.find((d) => /unbilled/i.test(d.label ?? ""));
+
+  const stmtAmount = parseAmount(
+    (bill.billamount ?? bill.net_billamount) as string | number | undefined
+  );
+  const totalDueVal = totalDue?.value ? parseAmount(totalDue.value) : NaN;
+  const base = Math.max(
+    Number.isNaN(totalDueVal) ? 0 : totalDueVal,
+    stmtAmount > 0 ? stmtAmount : 0
+  );
+  const unbilledVal = unbilled?.value ? parseAmount(unbilled.value) : 0;
+
+  const computed = base + unbilledVal;
+  if (computed > 0 || totalDue || unbilled) return computed;
+  return undefined;
 }
 
 export function parseBillFromPlaintext(data: unknown): BillFetchResult {
@@ -82,15 +102,20 @@ export function parseBillFromPlaintext(data: unknown): BillFetchResult {
     ) as PaymentBill;
 
     const extras = bill.additional_details;
-    let amount = parseAmount(
+
+    // Only `billamount` / `net_billamount` / `payment_amount` are the actual
+    // billed statement amount. Fields like "Current Outstanding Amount" in
+    // `additional_details` represent the LIVE running balance (statement +
+    // unbilled post-statement spends − credits). Treating them as a bill would
+    // inflate the due amount and show a bill when nothing is actually payable
+    // (e.g. BoB with a credit balance, HSBC after full payment, ICICI where
+    // the new statement hasn't been generated yet).
+    const amount = parseAmount(
       (bill.billamount ?? bill.net_billamount ?? payment.payment_amount) as
         | string
         | number
         | undefined
     );
-    if (amount <= 0) {
-      amount = amountFromAdditionalDetails(extras);
-    }
     const due = normalizeBilldeskDate(
       String(bill.billduedate ?? payment.billduedate ?? "")
     );
@@ -104,6 +129,34 @@ export function parseBillFromPlaintext(data: unknown): BillFetchResult {
       if (minRow?.value) min_due = parseAmount(minRow.value);
     }
 
+    const outstanding = extractOutstanding(bill);
+
+    // Some billers (e.g. SBM Bank India / Kreditpe) leave `billamount` at the
+    // ORIGINAL statement amount even after the customer pays through another
+    // channel, and reflect the real balance in additional_details."Total Amount
+    // Due" (or "Amount Due" / "Total Due"). If that authoritative field is
+    // explicitly 0, the cycle is settled — return NO_DUES regardless of what
+    // billamount says. We deliberately DO NOT match "Minimum Amount Due",
+    // "Current Outstanding", or "Unbilled Amount" here.
+    if (extras) {
+      const authRow = extras.find((d) =>
+        /^\s*(?:total\s*amount\s*due|amount\s*due|total\s*due|total\s*payable|net\s*amount\s*due)\s*$/i.test(
+          d.label ?? ""
+        )
+      );
+      if (authRow?.value !== undefined && authRow.value !== "") {
+        if (parseAmount(authRow.value) === 0) {
+          return {
+            status: "NO_DUES",
+            due_date: due || undefined,
+            bill_date: billDate || undefined,
+            amount: 0,
+            outstanding,
+          };
+        }
+      }
+    }
+
     if (amount > 0) {
       return {
         status: "FETCHED",
@@ -111,20 +164,20 @@ export function parseBillFromPlaintext(data: unknown): BillFetchResult {
         due_date: due || undefined,
         bill_date: billDate || new Date().toISOString().slice(0, 10),
         min_due: min_due || undefined,
+        outstanding,
       };
     }
 
-    // Kotak and others return billlist with ₹0 when nothing is payable
+    // billamount ≤ 0 with a real bill row = nothing payable this cycle
+    // (credit balance, zeroed net after adjustments, or PAID status).
     if (hasStructuredBill(bill)) {
-      const status = String(bill.billstatus ?? "").toUpperCase();
-      if (status === "PAID" || amount <= 0) {
-        return {
-          status: "NO_DUES",
-          due_date: due || undefined,
-          bill_date: billDate || undefined,
-          amount: 0,
-        };
-      }
+      return {
+        status: "NO_DUES",
+        due_date: due || undefined,
+        bill_date: billDate || undefined,
+        amount: 0,
+        outstanding,
+      };
     }
   }
 
