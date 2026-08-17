@@ -1,4 +1,4 @@
-import { isAuthSkipped } from "@/lib/household";
+import { ensureHousehold, getHouseholdId, isAuthSkipped } from "@/lib/household";
 import { createClient } from "@/lib/supabase/server";
 import { runBatchFetch, type FetchProgressEvent } from "@/lib/fetch-runner";
 
@@ -16,17 +16,32 @@ import { runBatchFetch, type FetchProgressEvent } from "@/lib/fetch-runner";
  * real progress instead of an indeterminate spinner.
  */
 export async function POST() {
-  if (!isAuthSkipped()) {
-    const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      return new Response(
-        JSON.stringify({ error: "Unauthorized" }),
-        { status: 401, headers: { "Content-Type": "application/json" } }
-      );
+  // Resolve the caller's household BEFORE opening the stream so we can reject
+  // unauthorized calls with a clean 401 and so `runBatchFetch` never runs
+  // unscoped (previously it fetched every card across every household).
+  let householdId: string;
+  try {
+    if (isAuthSkipped()) {
+      householdId = await getHouseholdId();
+    } else {
+      const supabase = await createClient();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) {
+        return new Response(
+          JSON.stringify({ error: "Unauthorized" }),
+          { status: 401, headers: { "Content-Type": "application/json" } }
+        );
+      }
+      householdId = await ensureHousehold(user.id);
     }
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "Failed to resolve household";
+    return new Response(
+      JSON.stringify({ error: message }),
+      { status: 500, headers: { "Content-Type": "application/json" } }
+    );
   }
 
   const encoder = new TextEncoder();
@@ -42,7 +57,7 @@ export async function POST() {
       };
 
       try {
-        await runBatchFetch({ onProgress: write });
+        await runBatchFetch({ householdId, onProgress: write });
       } catch (e) {
         const message = e instanceof Error ? e.message : "Fetch failed";
         write({ type: "error", message });
