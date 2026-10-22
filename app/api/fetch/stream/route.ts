@@ -15,10 +15,39 @@ import { runBatchFetch, type FetchProgressEvent } from "@/lib/fetch-runner";
  * The frontend reads this as a stream so the "Fetch all bills" button can show
  * real progress instead of an indeterminate spinner.
  */
-export async function POST() {
+type StreamBody = {
+  excludeCardIds?: unknown;
+  alreadyDone?: unknown;
+  runId?: unknown;
+};
+
+export async function POST(request: Request) {
   // Resolve the caller's household BEFORE opening the stream so we can reject
   // unauthorized calls with a clean 401 and so `runBatchFetch` never runs
   // unscoped (previously it fetched every card across every household).
+  let excludeCardIds: string[] = [];
+  let alreadyDone = 0;
+  let runId: string | undefined;
+  try {
+    const text = await request.text();
+    if (text.trim()) {
+      const body = JSON.parse(text) as StreamBody;
+      if (Array.isArray(body.excludeCardIds)) {
+        excludeCardIds = body.excludeCardIds.filter(
+          (id): id is string => typeof id === "string"
+        );
+      }
+      if (typeof body.alreadyDone === "number" && Number.isFinite(body.alreadyDone)) {
+        alreadyDone = Math.max(0, Math.floor(body.alreadyDone));
+      }
+      if (typeof body.runId === "string" && /^run_\d+$/.test(body.runId)) {
+        runId = body.runId;
+      }
+    }
+  } catch {
+    // Empty or non-JSON body means "fetch the whole household".
+  }
+
   let householdId: string;
   try {
     if (isAuthSkipped()) {
@@ -57,7 +86,19 @@ export async function POST() {
       };
 
       try {
-        await runBatchFetch({ householdId, onProgress: write });
+        // Stop starting new cards well before Vercel's maxDuration (300s).
+        // A slow card (ICICI retries) can still be in flight, so the budget
+        // leaves about two minutes for it to finish and for `continue` to
+        // flush. The dashboard opens the next request on its own.
+        const budgetMs = Number(process.env.FETCH_STREAM_BUDGET_MS ?? 170_000);
+        await runBatchFetch({
+          householdId,
+          excludeCardIds,
+          alreadyDone,
+          runId,
+          deadlineAt: Date.now() + (Number.isFinite(budgetMs) ? budgetMs : 200_000),
+          onProgress: write,
+        });
       } catch (e) {
         const message = e instanceof Error ? e.message : "Fetch failed";
         write({ type: "error", message });

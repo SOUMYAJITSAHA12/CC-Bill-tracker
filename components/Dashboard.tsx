@@ -286,16 +286,34 @@ export function Dashboard() {
     setMessage("");
     setFetchProgress({ total: 0, done: 0, current: null, failures: [] });
 
+    type FetchSummary = {
+      fetched?: number;
+      failed?: number;
+      no_dues?: number;
+      skipped_paid?: number;
+      details?: {
+        nickname: string;
+        status: string;
+        error?: string;
+        amount?: number;
+        due_date?: string;
+        portal_amount?: number;
+      }[];
+    };
+
     type ProgressEvent =
       | {
           type: "start";
+          run_id?: string;
           total: number;
+          done?: number;
           lanes: { biller: string; cards: { nickname: string }[] }[];
         }
       | { type: "card_start"; nickname: string; done: number; total: number }
       | {
           type: "card_done";
           outcome: {
+            card_id?: string;
             nickname: string;
             status: string;
             error?: string;
@@ -303,91 +321,159 @@ export function Dashboard() {
           done: number;
           total: number;
         }
+      | { type: "complete"; summary: FetchSummary }
       | {
-          type: "complete";
-          summary: {
-            fetched?: number;
-            failed?: number;
-            no_dues?: number;
-            skipped_paid?: number;
-            details?: {
-              nickname: string;
-              status: string;
-              error?: string;
-              amount?: number;
-              due_date?: string;
-              portal_amount?: number;
-            }[];
-          };
+          type: "continue";
+          run_id?: string;
+          remaining: number;
+          done: number;
+          total: number;
+          summary?: FetchSummary;
         }
       | { type: "error"; message: string };
 
-    let finalSummary: Extract<ProgressEvent, { type: "complete" }>["summary"] | null = null;
+    const finishedIds = new Set<string>();
+    // Chosen here, before any response, so a dropped stream can still resume:
+    // the server skips cards already written to fetch_log for this run id.
+    const runId = `run_${Date.now()}`;
+    let merged: FetchSummary | null = null;
     let streamError: string | null = null;
+    let finishedAll = false;
 
-    try {
-      const res = await fetch("/api/fetch/stream", { method: "POST" });
-      if (!res.ok || !res.body) {
-        const txt = await res.text().catch(() => "");
-        let parsed: { error?: string } = {};
-        try {
-          parsed = JSON.parse(txt) as { error?: string };
-        } catch {
-          // not JSON
-        }
-        setMessage(parsed.error ?? "Fetch failed");
+    function mergeSummary(next: FetchSummary | undefined) {
+      if (!next) return;
+      if (!merged) {
+        merged = {
+          fetched: next.fetched ?? 0,
+          failed: next.failed ?? 0,
+          no_dues: next.no_dues ?? 0,
+          skipped_paid: next.skipped_paid ?? 0,
+          details: [...(next.details ?? [])],
+        };
         return;
       }
+      merged = {
+        fetched: (merged.fetched ?? 0) + (next.fetched ?? 0),
+        failed: (merged.failed ?? 0) + (next.failed ?? 0),
+        no_dues: (merged.no_dues ?? 0) + (next.no_dues ?? 0),
+        skipped_paid: (merged.skipped_paid ?? 0) + (next.skipped_paid ?? 0),
+        details: [...(merged.details ?? []), ...(next.details ?? [])],
+      };
+    }
 
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-
-      while (true) {
-        const { value, done: streamDone } = await reader.read();
-        if (streamDone) break;
-        buffer += decoder.decode(value, { stream: true });
-
-        let nl = buffer.indexOf("\n");
-        while (nl !== -1) {
-          const line = buffer.slice(0, nl).trim();
-          buffer = buffer.slice(nl + 1);
-          if (line) {
-            try {
-              const event = JSON.parse(line) as ProgressEvent;
-              applyProgressEvent(event);
-              if (event.type === "complete") finalSummary = event.summary;
-              if (event.type === "error") streamError = event.message;
-            } catch {
-              // ignore malformed line — stream is still useful
-            }
-          }
-          nl = buffer.indexOf("\n");
-        }
+    function note(event: ProgressEvent) {
+      applyProgressEvent(event);
+      if (event.type === "card_done" && event.outcome.card_id) {
+        finishedIds.add(event.outcome.card_id);
       }
+      if (event.type === "continue") {
+        mergeSummary(event.summary);
+      }
+      if (event.type === "complete") {
+        finishedAll = true;
+        mergeSummary(event.summary);
+      }
+      if (event.type === "error") streamError = event.message;
+    }
 
-      const trailing = buffer.trim();
-      if (trailing) {
+    // Vercel kills the function at maxDuration (~300s). Each request stops
+    // itself around 170s. This loop opens the next one until every card in
+    // this household has been attempted, including when a round's stream is
+    // cut off — those cards are already on fetch_log under runId.
+    const MAX_ROUNDS = 24;
+    let stalledRounds = 0;
+    try {
+      for (let round = 0; round < MAX_ROUNDS && !finishedAll; round++) {
+        const before = finishedIds.size;
+        let roundError: string | null = null;
+
         try {
-          const event = JSON.parse(trailing) as ProgressEvent;
-          applyProgressEvent(event);
-          if (event.type === "complete") finalSummary = event.summary;
-          if (event.type === "error") streamError = event.message;
-        } catch {
-          // ignore
+          const res = await fetch("/api/fetch/stream", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              excludeCardIds: [...finishedIds],
+              alreadyDone: finishedIds.size,
+              runId,
+            }),
+          });
+          if (res.status === 401) {
+            streamError = "Unauthorized";
+            break;
+          }
+          if (!res.ok || !res.body) {
+            const txt = await res.text().catch(() => "");
+            let parsed: { error?: string } = {};
+            try {
+              parsed = JSON.parse(txt) as { error?: string };
+            } catch {
+              // not JSON
+            }
+            roundError = parsed.error ?? "Fetch failed";
+          } else {
+            const reader = res.body.getReader();
+            const decoder = new TextDecoder();
+            let buffer = "";
+
+            const consume = (line: string) => {
+              if (!line) return;
+              try {
+                note(JSON.parse(line) as ProgressEvent);
+              } catch {
+                // ignore malformed line — stream is still useful
+              }
+            };
+
+            while (true) {
+              const { value, done: streamDone } = await reader.read();
+              if (streamDone) break;
+              buffer += decoder.decode(value, { stream: true });
+
+              let nl = buffer.indexOf("\n");
+              while (nl !== -1) {
+                consume(buffer.slice(0, nl).trim());
+                buffer = buffer.slice(nl + 1);
+                nl = buffer.indexOf("\n");
+              }
+            }
+            consume(buffer.trim());
+          }
+        } catch (e) {
+          roundError = e instanceof Error ? e.message : "Fetch stream failed";
         }
+
+        if (finishedAll) break;
+        if (finishedIds.size > before) {
+          stalledRounds = 0;
+          streamError = null;
+          continue;
+        }
+
+        // No card ids landed in the browser. The function may still have
+        // saved bills before the connection died; the next request skips
+        // those via runId. A few idle rounds in a row means it really stopped.
+        stalledRounds += 1;
+        if (stalledRounds <= 3) {
+          streamError = null;
+          continue;
+        }
+        streamError = roundError ?? "Fetch stopped before all cards finished";
+        break;
       }
-    } catch (e) {
-      streamError = e instanceof Error ? e.message : "Fetch stream failed";
+      if (!finishedAll && !streamError) {
+        streamError = "Fetch stopped before all cards finished";
+      }
     } finally {
       setFetching(false);
       setFetchProgress(null);
     }
 
-    if (streamError && !finalSummary) {
+    if (merged) {
+      const suffix =
+        !finishedAll && streamError ? ` · stopped early: ${streamError}` : "";
+      setMessage(buildFetchSummary(merged) + suffix);
+    } else if (streamError) {
       setMessage(streamError);
-    } else if (finalSummary) {
-      setMessage(buildFetchSummary(finalSummary));
     } else {
       setMessage("Fetch finished");
     }
@@ -398,7 +484,12 @@ export function Dashboard() {
       setFetchProgress((prev) => {
         const base = prev ?? { total: 0, done: 0, current: null, failures: [] };
         if (event.type === "start") {
-          return { total: event.total, done: 0, current: null, failures: [] };
+          return {
+            total: event.total,
+            done: event.done ?? base.done,
+            current: null,
+            failures: base.failures,
+          };
         }
         if (event.type === "card_start") {
           return {
@@ -425,6 +516,14 @@ export function Dashboard() {
             done: event.done,
             current: null,
             failures,
+          };
+        }
+        if (event.type === "continue") {
+          return {
+            ...base,
+            total: event.total || base.total,
+            done: event.done,
+            current: null,
           };
         }
         if (event.type === "complete") {

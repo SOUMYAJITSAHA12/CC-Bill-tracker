@@ -39,7 +39,16 @@ export type FetchProgressEvent =
       type: "start";
       run_id: string;
       total: number;
+      done: number;
       lanes: { biller: string; cards: { card_id: string; nickname: string }[] }[];
+    }
+  | {
+      type: "continue";
+      run_id: string;
+      remaining: number;
+      done: number;
+      total: number;
+      summary: FetchRunSummary;
     }
   | {
       type: "card_start";
@@ -348,6 +357,19 @@ function recordOutcome(summary: FetchRunSummary, outcome: CardFetchOutcome) {
  */
 export async function runBatchFetch(options?: {
   householdId?: string;
+  /** Cards already fetched in an earlier invocation of the same user click. */
+  excludeCardIds?: string[];
+  /** Progress already reported to the UI (usually excludeCardIds.length). */
+  alreadyDone?: number;
+  /** Reuse the same run id across continuation requests. */
+  runId?: string;
+  /**
+   * Epoch ms. After this instant, lanes stop starting new cards and the run
+   * emits `continue` so the caller can resume in a fresh request. Used by the
+   * streaming API so a platform timeout (Vercel maxDuration) doesn't kill the
+   * function mid-card and drop the rest of the household.
+   */
+  deadlineAt?: number;
   /** @deprecated Use FETCH_BILLER_PARALLEL — lanes run in parallel, not per-card */
   concurrency?: number;
   delayMs?: number;
@@ -362,7 +384,9 @@ export async function runBatchFetch(options?: {
   };
 
   const supabase = createAdminClient();
-  const run_id = `run_${Date.now()}`;
+  const run_id = options?.runId ?? `run_${Date.now()}`;
+  const pastDeadline = () =>
+    options?.deadlineAt != null && Date.now() >= options.deadlineAt;
   const billerParallel = Math.max(
     1,
     Number(
@@ -388,13 +412,32 @@ export async function runBatchFetch(options?: {
   const { data: cards, error } = await query;
   if (error) throw error;
 
-  const eligible = (cards ?? []).filter((c) => billerNameForBank(c.bank));
+  const exclude = new Set(options?.excludeCardIds ?? []);
+  // A platform kill can drop the browser stream after cards were already
+  // saved. The same run id is on fetch_log, so the next request skips them
+  // even when the page never received the card_done events.
+  if (options?.runId) {
+    const { data: logged, error: logErr } = await supabase
+      .from("fetch_log")
+      .select("card_id")
+      .eq("run_id", options.runId)
+      .limit(2000);
+    if (!logErr) {
+      for (const row of logged ?? []) {
+        if (row.card_id) exclude.add(row.card_id);
+      }
+    }
+  }
+  const withBiller = (cards ?? []).filter((c) => billerNameForBank(c.bank));
+  const resumed = withBiller.filter((c) => exclude.has(c.id)).length;
+  const eligible = withBiller.filter((c) => !exclude.has(c.id));
+  const alreadyDone = Math.max(0, options?.alreadyDone ?? 0, resumed);
   const summary: FetchRunSummary = {
     run_id,
     fetched: 0,
     no_dues: 0,
     failed: 0,
-    skipped: (cards?.length ?? 0) - eligible.length,
+    skipped: (cards ?? []).filter((c) => !billerNameForBank(c.bank)).length,
     skipped_paid: 0,
     details: [],
   };
@@ -403,21 +446,22 @@ export async function runBatchFetch(options?: {
     (a, b) => b[1].length - a[1].length
   );
 
-  const total = eligible.length;
-  let done = 0;
+  const total = eligible.length + alreadyDone;
+  let done = alreadyDone;
 
   emit({
     type: "start",
     run_id,
     total,
-    lanes: lanes.map(([biller, cards]) => ({
+    done: alreadyDone,
+    lanes: lanes.map(([biller, laneCards]) => ({
       biller,
-      cards: cards.map((c) => ({ card_id: c.id, nickname: c.nickname })),
+      cards: laneCards.map((c) => ({ card_id: c.id, nickname: c.nickname })),
     })),
   });
 
   async function runBillerLane(laneCards: (typeof eligible)[0][]) {
-    if (laneCards.length === 0) return;
+    if (laneCards.length === 0 || pastDeadline()) return;
 
     const firstBank = laneCards[0].bank;
     const laneStaggerMs = laneDelayForBank(firstBank) ?? defaultStaggerMs;
@@ -427,6 +471,7 @@ export async function runBatchFetch(options?: {
     await laneClient.init();
 
     for (let i = 0; i < laneCards.length; i++) {
+      if (pastDeadline()) break;
       const card = laneCards[i];
 
       // For rate-limited billers (ICICI), re-init the session before each card
@@ -459,18 +504,32 @@ export async function runBatchFetch(options?: {
 
       emit({ type: "card_done", outcome, done, total });
 
-      if (i < laneCards.length - 1) {
+      if (i < laneCards.length - 1 && !pastDeadline()) {
         await delay(laneStaggerMs);
       }
     }
   }
 
   for (let w = 0; w < lanes.length; w += billerParallel) {
+    if (pastDeadline()) break;
     const wave = lanes.slice(w, w + billerParallel);
-    await Promise.all(wave.map(([, cards]) => runBillerLane(cards)));
+    await Promise.all(wave.map(([, laneCards]) => runBillerLane(laneCards)));
   }
 
-  emit({ type: "complete", summary });
+  const processed = new Set(summary.details.map((d) => d.card_id));
+  const remaining = eligible.filter((c) => !processed.has(c.id)).length;
+  if (remaining > 0) {
+    emit({
+      type: "continue",
+      run_id,
+      remaining,
+      done,
+      total,
+      summary,
+    });
+  } else {
+    emit({ type: "complete", summary });
+  }
 
   return summary;
 }
