@@ -1,3 +1,0 @@
-Retrigger the Vercel production deploy.
-
-The previous push reached GitHub but never created a Vercel deployment.
